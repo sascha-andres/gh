@@ -16,8 +16,8 @@ limitations under the License.
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"livingit.de/code/gh/helper"
 	"livingit.de/code/gh/wrapper"
@@ -31,18 +31,30 @@ var cfgFile string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "gh-foreach-repository",
-	Short: "Return GitHub repositories",
-	Long:  `Return a list of GitHub repositories as a json stream`,
+	Use:   "gh-clone",
+	Short: "Clone an organization",
+	Long:  `Clones all repositories from an organization`,
 	Run: func(cmd *cobra.Command, args []string) {
-
 		token, err := helper.Must("token")
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "error reading GitHub token: %s", err)
+			fmt.Fprintf(os.Stderr, "error reading GitHub token: %s\n", err)
 			os.Exit(1)
 		}
-		affiliation := viper.GetString("foreach.repository.affiliation")
-		visibility := viper.GetString("foreach.repository.visibility")
+
+		organization, err := helper.Must("clone.organization")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error reading organization: %s\n", err)
+			os.Exit(1)
+		}
+
+		ssh := viper.GetBool("clone.ssh")
+		user := viper.GetString("clone.user")
+		email := viper.GetString("clone.email")
+
+		logrus.
+			WithField("package", "cmd").
+			WithField("method", "clone::Run").
+			Infof("about to clone [%s]", organization)
 
 		w, err := wrapper.NewGitHubWrapper(token)
 		if err != nil {
@@ -50,21 +62,29 @@ var rootCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		repos, err := w.RepositoriesList(affiliation, visibility)
+		repos, err := w.RepositoriesListByOrganization(organization)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
 
 		for _, r := range repos {
-			data, err := json.Marshal(r)
-			if err != nil {
-				fmt.Fprintln(os.Stderr, err)
-				os.Exit(1)
+			logrus.
+				WithField("package", "cmd").
+				WithField("method", "clone::Run").
+				Infof("cloning [%s]", r.GetFullName())
+			if ssh {
+				_, _ = wrapper.Git("clone", r.GetSSHURL(), r.GetFullName())
+			} else {
+				_, _ = wrapper.Git("clone", r.GetHTMLURL(), r.GetFullName())
 			}
-			fmt.Fprintf(os.Stdout, "%s\n", data)
+			if user != "" {
+				_, _ = wrapper.Git("-C", r.GetFullName(), "config", "user.name", user)
+			}
+			if email != "" {
+				_, _ = wrapper.Git("-C", r.GetFullName(), "config", "user.email", email)
+			}
 		}
-
 	},
 }
 
@@ -79,16 +99,19 @@ func Execute() {
 
 func init() {
 	cobra.OnInitialize(initConfig)
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.gh-clone.yaml)")
 
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.gh-foreach-repository.yaml)")
-
-	rootCmd.PersistentFlags().StringP("visibility", "v", "", "Visibility of repositories to list. Can be one of all, public, or private.")
-	rootCmd.PersistentFlags().StringP("affiliation", "a", "", "List repos of given affiliation[s]. Default: owner,collaborator,organization_member")
 	rootCmd.PersistentFlags().StringP("token", "t", "", "GitHub token")
+	rootCmd.PersistentFlags().StringP("organization", "o", "", "Name of organization")
+	rootCmd.Flags().StringP("user", "", "", "user.name for cloned repositories")
+	rootCmd.Flags().StringP("email", "", "", "user.email for cloned repositories")
+	rootCmd.Flags().BoolP("ssh", "s", true, "Use SSH to clone")
 
-	viper.BindPFlag("token", rootCmd.PersistentFlags().Lookup("token"))
-	viper.BindPFlag("foreach.repository.affiliation", rootCmd.PersistentFlags().Lookup("affiliation"))
-	viper.BindPFlag("foreach.repository.visibility", rootCmd.PersistentFlags().Lookup("visibility"))
+	_ = viper.BindPFlag("token", rootCmd.PersistentFlags().Lookup("token"))
+	_ = viper.BindPFlag("clone.organization", rootCmd.PersistentFlags().Lookup("organization"))
+	_ = viper.BindPFlag("clone.ssh", rootCmd.Flags().Lookup("ssh"))
+	_ = viper.BindPFlag("clone.user", rootCmd.Flags().Lookup("user"))
+	_ = viper.BindPFlag("clone.email", rootCmd.Flags().Lookup("email"))
 }
 
 // initConfig reads in config file and ENV variables if set.
@@ -104,6 +127,7 @@ func initConfig() {
 			os.Exit(1)
 		}
 
+		// Search config in home directory with name ".gh-clone" (without extension).
 		viper.AddConfigPath(home)
 		viper.SetConfigName(".gh")
 	}

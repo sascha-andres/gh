@@ -4,6 +4,7 @@ import (
 	"github.com/google/go-github/v29/github"
 )
 
+// RepositoriesList returns all repositories to which the user has access to
 func (w *GitHubWrapper) RepositoriesList(affiliation, visibility string) ([]*github.Repository, error) {
 	var (
 		result = make([]*github.Repository, 0)
