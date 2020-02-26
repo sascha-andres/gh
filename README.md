@@ -16,3 +16,4 @@ Returns a stream of JSON (one per repository)
 
 |Version|Description|
 |---|---|
+|0.1.0|initial release|
