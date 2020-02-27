@@ -38,17 +38,17 @@ var rootCmd = &cobra.Command{
 
 When --organization is provided list gists for that organization/user`,
 	Run: func(cmd *cobra.Command, args []string) {
+		logger := logrus.
+			WithField("package", "cmd").
+			WithField("method", "gists::Run")
+
 		token, err := helper.Must("token")
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "error reading GitHub token: %s\n", err)
+			logger.Errorf("error reading GitHub token: %s\n", err)
 			os.Exit(1)
 		}
 
 		organization := viper.GetString("gists.organization")
-
-		logger := logrus.
-			WithField("package", "cmd").
-			WithField("method", "gists::Run")
 
 		logger.Infof("about to list gists in [%s]", organization)
 

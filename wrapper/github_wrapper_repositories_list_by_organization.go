@@ -9,7 +9,7 @@ import (
 func (w *GitHubWrapper) RepositoriesListByOrganization(organization string) ([]*github.Repository, error) {
 	logger := logrus.WithField("package", "wrapper").WithField("method", "RepositoriesListByOrganization")
 	logger.Debugf(">> called with organization := [%s]", organization)
-	logger.Debugf("<< done for organization := [%s]", organization)
+	defer logger.Debugf("<< done for organization := [%s]", organization)
 
 	var (
 		result = make([]*github.Repository, 0)

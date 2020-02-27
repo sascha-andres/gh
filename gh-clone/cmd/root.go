@@ -35,15 +35,19 @@ var rootCmd = &cobra.Command{
 	Short: "Clone an organization",
 	Long:  `Clones all repositories from an organization`,
 	Run: func(cmd *cobra.Command, args []string) {
+		logger := logrus.
+			WithField("package", "cmd").
+			WithField("method", "gists::Run")
+
 		token, err := helper.Must("token")
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "error reading GitHub token: %s\n", err)
+			logger.Errorf("error reading GitHub token: %s\n", err)
 			os.Exit(1)
 		}
 
 		organization, err := helper.Must("clone.organization")
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "error reading organization: %s\n", err)
+			logger.Errorf("error reading organization: %s\n", err)
 			os.Exit(1)
 		}
 
@@ -51,10 +55,7 @@ var rootCmd = &cobra.Command{
 		user := viper.GetString("clone.user")
 		email := viper.GetString("clone.email")
 
-		logrus.
-			WithField("package", "cmd").
-			WithField("method", "clone::Run").
-			Infof("about to clone [%s]", organization)
+		logger.Infof("about to clone [%s]", organization)
 
 		w, err := wrapper.NewGitHubWrapper(token)
 		if err != nil {
@@ -69,10 +70,7 @@ var rootCmd = &cobra.Command{
 		}
 
 		for _, r := range repos {
-			logrus.
-				WithField("package", "cmd").
-				WithField("method", "clone::Run").
-				Infof("cloning [%s]", r.GetFullName())
+			logger.Infof("cloning [%s]", r.GetFullName())
 			if ssh {
 				_, _ = helper.Git("clone", r.GetSSHURL(), r.GetFullName())
 			} else {
@@ -100,12 +98,14 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.gh-clone.yaml)")
 
 	rootCmd.PersistentFlags().StringP("token", "t", "", "GitHub token")
+	rootCmd.PersistentFlags().StringP("log-level", "l", "warn", "Set log level (defaulting to warn)\nmay break pipes as log messages appear within json stream")
 	rootCmd.PersistentFlags().StringP("organization", "o", "", "Name of organization")
 	rootCmd.Flags().StringP("user", "", "", "user.name for cloned repositories")
 	rootCmd.Flags().StringP("email", "", "", "user.email for cloned repositories")
 	rootCmd.Flags().BoolP("ssh", "s", true, "Use SSH to clone")
 
 	_ = viper.BindPFlag("token", rootCmd.PersistentFlags().Lookup("token"))
+	_ = viper.BindPFlag("log-level", rootCmd.PersistentFlags().Lookup("log-level"))
 	_ = viper.BindPFlag("clone.organization", rootCmd.PersistentFlags().Lookup("organization"))
 	_ = viper.BindPFlag("clone.ssh", rootCmd.Flags().Lookup("ssh"))
 	_ = viper.BindPFlag("clone.user", rootCmd.Flags().Lookup("user"))
@@ -133,4 +133,16 @@ func initConfig() {
 	viper.AutomaticEnv() // read in environment variables that match
 
 	viper.ReadInConfig()
+
+	logLevel := viper.GetString("log-level")
+	if logLevel == "" {
+		logLevel = "warn"
+	}
+
+	lvl, err := logrus.ParseLevel(logLevel)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error parsing loglevel: %s", err)
+		os.Exit(1)
+	}
+	logrus.SetLevel(lvl)
 }
