@@ -7,14 +7,9 @@ import (
 
 // RepositoriesListByOrganization returns all repositories inside an organization
 func (w *GitHubWrapper) RepositoriesListByOrganization(organization string) ([]*github.Repository, error) {
-	logrus.
-		WithField("package", "wrapper").
-		WithField("method", "RepositoriesListByOrganization").
-		Debugf(">> read repositories from [%s]", organization)
-	defer logrus.
-		WithField("package", "wrapper").
-		WithField("method", "RepositoriesListByOrganization").
-		Debugf("<< read repositories from [%s]", organization)
+	logger := logrus.WithField("package", "wrapper").WithField("method", "RepositoriesListByOrganization")
+	logger.Debugf(">> called with organization := [%s]", organization)
+	logger.Debugf("<< done for organization := [%s]", organization)
 
 	var (
 		result = make([]*github.Repository, 0)

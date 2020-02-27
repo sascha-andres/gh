@@ -9,7 +9,7 @@ import (
 func (w *GitHubWrapper) GistsList(organization string) ([]*github.Gist, error) {
 	logger := logrus.WithField("package", "wrapper").WithField("method", "GistsList")
 	logger.Debugf(">> called with organization := [%s]", organization)
-	logger.Debugf("<< done for organization := [%s]", organization)
+	defer logger.Debugf("<< done for organization := [%s]", organization)
 
 	var (
 		result = make([]*github.Gist, 0)
