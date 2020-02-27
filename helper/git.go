@@ -1,6 +1,7 @@
-package wrapper
+package helper
 
 import (
+	"github.com/sirupsen/logrus"
 	"os"
 	"os/exec"
 	"syscall"
@@ -21,6 +22,10 @@ func init() {
 }
 
 func Git(args ...string) (int, error) {
+	logger := logrus.WithField("package", "helper").WithField("method", "Git")
+	logger.Debugf(">> called with args := %v", args)
+	logger.Debugf("<< done for args := %v", args)
+
 	command := exec.Command(gitExecutable, args...)
 	command.Stdout = os.Stdout
 	command.Stdin = os.Stdin

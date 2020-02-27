@@ -18,6 +18,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"livingit.de/code/gh/helper"
 	"livingit.de/code/gh/wrapper"
@@ -35,10 +36,13 @@ var rootCmd = &cobra.Command{
 	Short: "Return GitHub repositories",
 	Long:  `Return a list of GitHub repositories as a json stream`,
 	Run: func(cmd *cobra.Command, args []string) {
+		logger := logrus.
+			WithField("package", "cmd").
+			WithField("method", "foreach-repository::Run")
 
 		token, err := helper.Must("token")
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "error reading GitHub token: %s", err)
+			logger.Errorf("error reading GitHub token: %s", err)
 			os.Exit(1)
 		}
 		affiliation := viper.GetString("foreach.repository.affiliation")
@@ -46,20 +50,20 @@ var rootCmd = &cobra.Command{
 
 		w, err := wrapper.NewGitHubWrapper(token)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			logger.Error(err)
 			os.Exit(1)
 		}
 
 		repos, err := w.RepositoriesList(affiliation, visibility)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			logger.Error(err)
 			os.Exit(1)
 		}
 
 		for _, r := range repos {
 			data, err := json.Marshal(r)
 			if err != nil {
-				fmt.Fprintln(os.Stderr, err)
+				logger.Error(err)
 				os.Exit(1)
 			}
 			fmt.Fprintf(os.Stdout, "%s\n", data)
