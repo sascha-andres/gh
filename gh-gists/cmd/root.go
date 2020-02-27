@@ -16,6 +16,7 @@ limitations under the License.
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -31,9 +32,11 @@ var cfgFile string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "gh-clone",
-	Short: "Clone an organization",
-	Long:  `Clones all repositories from an organization`,
+	Use:   "gh-gists",
+	Short: "List gists for you or an organization",
+	Long: `Returns gists as JSON stream.
+
+When --organization is provided list gists for that organization/user`,
 	Run: func(cmd *cobra.Command, args []string) {
 		token, err := helper.Must("token")
 		if err != nil {
@@ -41,53 +44,40 @@ var rootCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		organization, err := helper.Must("clone.organization")
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error reading organization: %s\n", err)
-			os.Exit(1)
-		}
+		organization := viper.GetString("gists.organization")
 
-		ssh := viper.GetBool("clone.ssh")
-		user := viper.GetString("clone.user")
-		email := viper.GetString("clone.email")
-
-		logrus.
+		logger := logrus.
 			WithField("package", "cmd").
-			WithField("method", "clone::Run").
-			Infof("about to clone [%s]", organization)
+			WithField("method", "gists::Run")
+
+		logger.Infof("about to list gists in [%s]", organization)
 
 		w, err := wrapper.NewGitHubWrapper(token)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			logger.Error(err)
 			os.Exit(1)
 		}
 
-		repos, err := w.RepositoriesListByOrganization(organization)
+		gists, err := w.GistsList(organization)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			logger.Error(err)
 			os.Exit(1)
 		}
 
-		for _, r := range repos {
-			logrus.
-				WithField("package", "cmd").
-				WithField("method", "clone::Run").
-				Infof("cloning [%s]", r.GetFullName())
-			if ssh {
-				_, _ = helper.Git("clone", r.GetSSHURL(), r.GetFullName())
-			} else {
-				_, _ = helper.Git("clone", r.GetHTMLURL(), r.GetFullName())
+		for _, gist := range gists {
+			data, err := json.Marshal(gist)
+			if err != nil {
+				logger.Error(err)
+				os.Exit(1)
 			}
-			if user != "" {
-				_, _ = helper.Git("-C", r.GetFullName(), "config", "user.name", user)
-			}
-			if email != "" {
-				_, _ = helper.Git("-C", r.GetFullName(), "config", "user.email", email)
-			}
+
+			fmt.Println(string(data))
 		}
 	},
 }
 
+// Execute adds all child commands to the root command and sets flags appropriately.
+// This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
@@ -97,19 +87,16 @@ func Execute() {
 
 func init() {
 	cobra.OnInitialize(initConfig)
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.gh-clone.yaml)")
+
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.gh-gists.yaml)")
 
 	rootCmd.PersistentFlags().StringP("token", "t", "", "GitHub token")
+	rootCmd.PersistentFlags().StringP("log-level", "l", "warn", "Set log level (defaulting to warn)\nmay break pipes as log messages appear within json stream")
 	rootCmd.PersistentFlags().StringP("organization", "o", "", "Name of organization")
-	rootCmd.Flags().StringP("user", "", "", "user.name for cloned repositories")
-	rootCmd.Flags().StringP("email", "", "", "user.email for cloned repositories")
-	rootCmd.Flags().BoolP("ssh", "s", true, "Use SSH to clone")
 
 	_ = viper.BindPFlag("token", rootCmd.PersistentFlags().Lookup("token"))
-	_ = viper.BindPFlag("clone.organization", rootCmd.PersistentFlags().Lookup("organization"))
-	_ = viper.BindPFlag("clone.ssh", rootCmd.Flags().Lookup("ssh"))
-	_ = viper.BindPFlag("clone.user", rootCmd.Flags().Lookup("user"))
-	_ = viper.BindPFlag("clone.email", rootCmd.Flags().Lookup("email"))
+	_ = viper.BindPFlag("log-level", rootCmd.PersistentFlags().Lookup("log-level"))
+	_ = viper.BindPFlag("gists.organization", rootCmd.PersistentFlags().Lookup("organization"))
 }
 
 // initConfig reads in config file and ENV variables if set.
@@ -125,7 +112,7 @@ func initConfig() {
 			os.Exit(1)
 		}
 
-		// Search config in home directory with name ".gh-clone" (without extension).
+		// Search config in home directory with name ".gh" (without extension).
 		viper.AddConfigPath(home)
 		viper.SetConfigName(".gh")
 	}
@@ -133,4 +120,16 @@ func initConfig() {
 	viper.AutomaticEnv() // read in environment variables that match
 
 	viper.ReadInConfig()
+
+	logLevel := viper.GetString("log-level")
+	if logLevel == "" {
+		logLevel = "warn"
+	}
+
+	lvl, err := logrus.ParseLevel(logLevel)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error parsing loglevel: %s", err)
+		os.Exit(1)
+	}
+	logrus.SetLevel(lvl)
 }
